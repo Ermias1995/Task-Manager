@@ -67,7 +67,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-50">
       <DashboardHeader />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10"> {/* Reduced padding from py-10 to py-6 */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4"> {/* Reduced vertical padding */}
         
         {isWorkspaceModalOpen ? (
           <div className="max-w-md mx-auto mt-20 bg-white p-8 rounded-xl shadow-lg text-center animate-in fade-in zoom-in-95">
@@ -81,11 +81,11 @@ export default function Dashboard() {
         ) : (
           <>
             {/* Workspace Switcher */}
-            <div className="mb-6 pb-2 border-b border-slate-200">
+            <div className="mb-4"> {/* Reduced margin */}
               <select 
                 value={currentWorkspaceId || ''} 
                 onChange={(e) => setCurrentWorkspaceId(e.target.value)}
-                className="text-xl font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover:bg-white transition-colors w-full md:w-auto"
+                className="text-lg font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover:bg-white transition-colors w-full md:w-auto"
               >
                 {workspaces.map((ws) => (
                   <option key={ws.id} value={ws.id}>{ws.name}</option>
@@ -99,6 +99,10 @@ export default function Dashboard() {
               user={user} 
               onMemberAdded={() => window.location.reload()} 
             />
+            
+            <div className="mb-6"> {/* Added margin here to separate Projects */}
+              <h2 className="text-2xl font-bold text-slate-900">Projects</h2>
+            </div>
             
             <ProjectList projects={projects} currentWorkspaceId={currentWorkspaceId!} />
           </>
