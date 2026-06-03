@@ -155,6 +155,23 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
         }
     };
 
+      const handleCheckOverdue = async () => {
+        const { data, error } = await supabase.functions.invoke('get-overdue', {
+        body: { project_id: projectId }
+        });
+
+        if (error) {
+        alert(`Error: ${error.message}`);
+        } else {
+        const count = data?.overdue_count || 0;
+        if (count === 0) {
+            alert('Great job! No overdue tasks.');
+        } else {
+            alert(`You have ${count} overdue tasks! Check the list.`);
+        }
+        }
+    };
+
     return (
     <div className="space-y-6">
       {/* --- EXPANDED ADD TASK FORM --- */}
@@ -213,6 +230,13 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
             </button>
           );
         })}
+        {/* Overdue Button */}
+        <button
+          onClick={handleCheckOverdue}
+          className="text-xs font-medium text-orange-600 hover:text-orange-700 flex items-center gap-1 px-3 py-1 rounded-full bg-orange-50 hover:bg-orange-100 transition-colors"
+        >
+          ⚠️ Check Overdue
+        </button>
       </div>
 
       {/* --- TASK LIST --- */}
