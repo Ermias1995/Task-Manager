@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Database } from '@/types/database';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 type Task = Database['public']['Tables']['tasks']['Row'];
 
@@ -14,7 +15,19 @@ interface TaskListProps {
 
 export default function TaskList({ initialTasks, projectId }: TaskListProps) {
   const supabase = createClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
+
+  // 1. Get current filter from URL (default to 'all')
+  const currentFilter = searchParams.get('status') || 'all';
+
+  // 2. Filter logic
+  const filteredTasks = tasks.filter(task => {
+    if (currentFilter === 'all') return true;
+    return task.status === currentFilter;
+  });
   
   const [newTask, setNewTask] = useState({
     title: '',
@@ -110,11 +123,24 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
     }
   };
 
-  return (
+    const handleFilterChange = (newStatus: string) => {
+    // Update URL without refreshing the page
+    const params = new URLSearchParams(searchParams.toString());
+    if (newStatus === 'all') {
+      params.delete('status');
+    } else {
+      params.set('status', newStatus);
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
+    return (
     <div className="space-y-6">
       {/* --- EXPANDED ADD TASK FORM --- */}
+      {/* (Keep your form code exactly as it is) */}
       <form onSubmit={handleAddTask} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-        <input
+        {/* ... inputs ... */}
+         <input
           type="text"
           className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
           placeholder="Task Title..."
@@ -146,15 +172,42 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
         </div>
       </form>
 
+      {/* --- FILTER BAR (NEW) --- */}
+      <div className="flex gap-2 border-b border-slate-200 pb-1">
+        {['all', 'todo', 'in_progress', 'done'].map((filter) => {
+          const isActive = currentFilter === filter;
+          const label = filter === 'all' ? 'All' : filter.replace('_', ' ');
+          
+          return (
+            <button
+              key={filter}
+              onClick={() => handleFilterChange(filter)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                isActive 
+                  ? 'border-indigo-600 text-indigo-600' 
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {label.charAt(0).toUpperCase() + label.slice(1)}
+            </button>
+          );
+        })}
+      </div>
+
       {/* --- TASK LIST --- */}
+      {/* Updated to use filteredTasks */}
       <div className="space-y-3">
-        {tasks.length === 0 && <p className="text-slate-500 text-center py-8">No tasks yet.</p>}
+        {filteredTasks.length === 0 && (
+          <p className="text-slate-500 text-center py-8">
+            {currentFilter === 'all' ? 'No tasks yet.' : `No tasks with status "${currentFilter}".`}
+          </p>
+        )}
         
-        {tasks.map((task) => (
+        {filteredTasks.map((task) => (
+          // ... (Keep your task card code exactly as it is)
           <div key={task.id} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-indigo-300 transition-all">
-            
-            {/* Left: Checkbox + Content */}
-            <div className="flex items-start gap-4 flex-1 w-full md:w-auto">
+             {/* ... content ... */}
+             <div className="flex items-start gap-4 flex-1 w-full md:w-auto">
               <button 
                 onClick={() => handleStatusChange(task.id, task.status === 'done' ? 'todo' : 'done')}
                 className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors flex-shrink-0
