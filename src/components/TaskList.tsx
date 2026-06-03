@@ -17,6 +17,7 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
 
@@ -134,6 +135,26 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
     router.replace(`?${params.toString()}`, { scroll: false });
   };
 
+      // --- HANDLE SAVE (Updates Title, Desc, Date) ---
+    const handleSaveEdit = async (taskId: string, updates: Partial<Task>) => {
+        // 1. Optimistic UI: Update local state immediately
+        setTasks(prev => prev.map(t => 
+        t.id === taskId ? { ...t, ...updates } : t
+        ));
+
+        // 2. Send to DB
+        const { error } = await supabase
+        .from('tasks')
+        .update(updates)
+        .eq('id', taskId);
+
+        if (error) {
+        alert('Failed to save changes');
+        } else {
+        setEditingId(null); // Exit edit mode on success
+        }
+    };
+
     return (
     <div className="space-y-6">
       {/* --- EXPANDED ADD TASK FORM --- */}
@@ -205,9 +226,11 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
         
         {filteredTasks.map((task) => (
           // ... (Keep your task card code exactly as it is)
-          <div key={task.id} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-indigo-300 transition-all">
-             {/* ... content ... */}
-             <div className="flex items-start gap-4 flex-1 w-full md:w-auto">
+                    <div key={task.id} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-indigo-300 transition-all">
+            
+            {/* Left: Content OR Edit Form */}
+            <div className="flex items-start gap-4 flex-1 w-full md:w-auto">
+              {/* Checkbox (Always Visible) */}
               <button 
                 onClick={() => handleStatusChange(task.id, task.status === 'done' ? 'todo' : 'done')}
                 className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors flex-shrink-0
@@ -219,29 +242,88 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
                 ✓
               </button>
 
-              <div className="flex-1 min-w-0">
-                <p className={`font-medium truncate ${task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                  {task.title}
-                </p>
-                
-                {task.description && (
-                  <p className="text-sm text-slate-500 mt-1 line-clamp-2">{task.description}</p>
-                )}
-
-                {task.due_date && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded flex items-center gap-1">
-                       📅 {new Date(task.due_date).toLocaleDateString()}
-                    </span>
+              <div className="flex-1 min-w-0 w-full">
+                {editingId === task.id ? (
+                  // --- EDIT MODE: Form ---
+                  <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <input
+                      autoFocus
+                      type="text"
+                      defaultValue={task.title}
+                      id={`edit-title-${task.id}`}
+                      className="w-full px-2 py-1 text-base font-bold border-b border-indigo-500 focus:outline-none bg-slate-50 rounded"
+                    />
+                    <textarea
+                      defaultValue={task.description || ''}
+                      id={`edit-desc-${task.id}`}
+                      placeholder="Add description..."
+                      className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+                      rows={2}
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-slate-500">Due:</label>
+                      <input
+                        type="date"
+                        defaultValue={task.due_date ? task.due_date.split('T')[0] : ''}
+                        id={`edit-date-${task.id}`}
+                        className="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          const title = (document.getElementById(`edit-title-${task.id}`) as HTMLInputElement).value;
+                          const desc = (document.getElementById(`edit-desc-${task.id}`) as HTMLTextAreaElement).value;
+                          const date = (document.getElementById(`edit-date-${task.id}`) as HTMLInputElement).value;
+                          handleSaveEdit(task.id, { 
+                            title, 
+                            description: desc || null, 
+                            due_date: date || null 
+                          });
+                        }}
+                        className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="text-xs bg-slate-200 text-slate-700 px-3 py-1 rounded hover:bg-slate-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  // --- VIEW MODE: Display ---
+                  <>
+                    <div 
+                      onClick={() => setEditingId(task.id)}
+                      className="group/title cursor-text"
+                    >
+                      <p className={`font-medium truncate ${task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-900'} group-hover/title:text-indigo-600 transition-colors`}>
+                        {task.title}
+                      </p>
+                      {task.description && (
+                        <p className="text-sm text-slate-500 mt-1 line-clamp-2 group-hover/title:text-indigo-400">{task.description}</p>
+                      )}
+                    </div>
+
+                    {task.due_date && (
+                      <div className="flex items-center gap-1 mt-2">
+                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded flex items-center gap-1 group-hover/due:bg-indigo-50 group-hover/due:text-indigo-600 transition-colors cursor-pointer" onClick={() => setEditingId(task.id)}>
+                          📅 {new Date(task.due_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
 
-            {/* Right: Controls */}
+            {/* Right: Controls (Status Dropdown + Delete) - Keep this exactly as it was */}
             <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-              
-              {/* Status Dropdown */}
               <select
                 value={task.status ?? 'todo'}
                 onChange={(e) => handleStatusChange(task.id, e.target.value)}
@@ -251,8 +333,6 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
                 <option value="in_progress">In Progress</option>
                 <option value="done">Done</option>
               </select>
-
-              {/* Delete Button */}
               <button
                 onClick={() => handleDelete(task.id)}
                 className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"
