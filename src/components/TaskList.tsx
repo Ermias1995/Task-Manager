@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Database } from '@/types/database';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 type Task = Database['public']['Tables']['tasks']['Row'];
 
@@ -15,53 +16,67 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
   const supabase = createClient();
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   
-  // State for the new task form
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
-    due_date: '', // Format: YYYY-MM-DD
+    due_date: '',
   });
 
-  // --- OPTIMISTIC UI: Delete Task ---
+  // --- REALTIME SUBSCRIPTION ---
+  useEffect(() => {
+    const channel: RealtimeChannel = supabase
+      .channel(`tasks:${projectId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+          filter: `project_id=eq.${projectId}`
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setTasks(prev => {
+              // FIX: Check if task already exists to prevent duplicates
+              // (This happens when we create a task locally AND receive the realtime event for it)
+              if (prev.some(task => task.id === payload.new.id)) {
+                return prev;
+              }
+              return [payload.new as Task, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setTasks(prev => prev.map(task => 
+              task.id === payload.new.id ? payload.new as Task : task
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            setTasks(prev => prev.filter(task => task.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, projectId]); 
+
+  // --- HANDLERS ---
   const handleDelete = async (taskId: string) => {
     const previousTasks = [...tasks];
-    
-    // 1. Remove from UI immediately
     setTasks(prev => prev.filter(t => t.id !== taskId));
-
-    // 2. Send to DB
-    const { error } = await supabase
-      .from('tasks')
-      .delete()
-      .eq('id', taskId);
-
-    // 3. Rollback on error
-    if (error) {
-      console.error('Delete failed:', error);
-      setTasks(previousTasks);
-      alert('Failed to delete task');
-    }
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    if (error) { setTasks(previousTasks); alert('Failed to delete'); }
   };
 
-  // --- OPTIMISTIC UI: Change Status ---
   const handleStatusChange = async (taskId: string, newStatus: string) => {
     const previousTasks = [...tasks];
     setTasks(prev => prev.map(t => 
       t.id === taskId ? { ...t, status: newStatus as Task['status'] } : t
     ));
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({ status: newStatus })
-      .eq('id', taskId);
-
-    if (error) {
-      setTasks(previousTasks);
-      alert('Failed to update status');
-    }
+    const { error } = await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
+    if (error) { setTasks(previousTasks); alert('Failed to update'); }
   };
 
-  // --- ADD TASK (With Extra Fields) ---
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.title.trim()) return;
@@ -72,7 +87,6 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
         title: newTask.title, 
         description: newTask.description || null,
         due_date: newTask.due_date || null,
-        // assignee_id: null, // We would look this up from email here
         project_id: projectId, 
         status: 'todo' 
       }])
@@ -83,7 +97,6 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
       alert('Failed to add task: ' + error.message);
     } else if (data) {
       setTasks(prev => [data, ...prev]);
-      // Reset form
       setNewTask({ title: '', description: '', due_date: '' });
     }
   };
@@ -99,7 +112,6 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
 
   return (
     <div className="space-y-6">
-      
       {/* --- EXPANDED ADD TASK FORM --- */}
       <form onSubmit={handleAddTask} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
         <input
@@ -159,12 +171,10 @@ export default function TaskList({ initialTasks, projectId }: TaskListProps) {
                   {task.title}
                 </p>
                 
-                {/* Description Display */}
                 {task.description && (
                   <p className="text-sm text-slate-500 mt-1 line-clamp-2">{task.description}</p>
                 )}
 
-                {/* Due Date Display */}
                 {task.due_date && (
                   <div className="flex items-center gap-1 mt-2">
                     <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded flex items-center gap-1">
